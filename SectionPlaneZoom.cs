@@ -55,6 +55,13 @@ namespace SectionPlaneZoom
             }
 
             InwOpState10 comState = ComBridge.State;
+            // checking view state name
+            //ComHelper.DiscoverViewMethods(comState);
+            //ComHelper.DiscoverViewpointClipping(doc);
+            //ComHelper.DiscoverClippingPlanes(comState);
+            ComHelper.DiscoverClipPlaneSetMethods(doc);
+
+
 
             // === COM API Discovery ===
             DebugLog.Log("--- COM API Discovery ---");
@@ -112,6 +119,7 @@ namespace SectionPlaneZoom
                     }
                 }
 
+
                 DebugLog.Log($"Loop complete: {successCount} succeeded, {failedClashes.Count} failed");
 
                 if (failedClashes.Count > 0)
@@ -130,7 +138,10 @@ namespace SectionPlaneZoom
 
             doc.CurrentSelection.Clear();
             doc.Models.ResetAllPermanentMaterials();
-            ComHelper.DisableSectioning(comState);
+            ComHelper.DisableSectioningNet(doc);
+
+            //not working enable sectioning
+            //ComHelper.EnableSectioningForAllViewpoints(doc, "Clash Section Views");
 
             DebugLog.Log("=== Finished ===");
             DebugLog.Save();
@@ -153,34 +164,336 @@ namespace SectionPlaneZoom
                 return obj.GetType().InvokeMember(prop, BF.GetProperty, null, obj, null);
             }
 
+            
+
+            public static void DisableSectioningNet(Document doc)
+            {
+                try
+                {
+                    Viewpoint vp = doc.CurrentViewpoint.ToViewpoint().CreateCopy();
+                    Type vpType = vp.GetType();
+                    PropertyInfo internalProp = vpType.GetProperty("InternalClipPlanes",
+                        BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+                    if (internalProp != null)
+                    {
+                        dynamic clipPlaneSet = internalProp.GetValue(vp);
+                        clipPlaneSet.SetEnabled(false);
+                        doc.CurrentViewpoint.CopyFrom(vp);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Log($"  DisableSectioningNet failed: {ex.Message}");
+                }
+            }
+
+            public static Viewpoint SetSectionPlaneOnViewpoint(Document doc, Viewpoint sourceVp, double z)
+            {
+                try
+                {
+                    // Create a copy of the viewpoint that we'll modify
+                    Viewpoint vpCopy = sourceVp.CreateCopy();
+
+                    // Get InternalClipPlanes via reflection
+                    Type vpType = vpCopy.GetType();
+                    PropertyInfo internalProp = vpType.GetProperty("InternalClipPlanes",
+                        BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+                    if (internalProp == null)
+                    {
+                        DebugLog.Log("  InternalClipPlanes not found");
+                        return vpCopy;
+                    }
+
+                    dynamic clipPlaneSet = internalProp.GetValue(vpCopy);
+
+                    // Enable sectioning and link to viewpoint
+                    clipPlaneSet.SetEnabled(true);
+                    clipPlaneSet.SetLinked(true);
+
+                    DebugLog.Log($"  Section ENABLED at Z={z:F3}");
+
+                    return vpCopy;  // Return the modified viewpoint
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Log($"  SetSectionPlaneOnViewpoint error: {ex.Message}");
+                    return sourceVp;
+                }
+            }
+
+            public static void DiscoverClipPlaneSetMethods(Document doc)
+            {
+                try
+                {
+                    DebugLog.Log("=== LcOaClipPlaneSet DISCOVERY ===");
+
+                    Viewpoint vp = doc.CurrentViewpoint.ToViewpoint();
+
+                    // Get the internal clip planes via reflection
+                    Type vpType = vp.GetType();
+                    PropertyInfo internalProp = vpType.GetProperty("InternalClipPlanes",
+                        BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+                    if (internalProp != null)
+                    {
+                        object clipPlaneSet = internalProp.GetValue(vp);
+                        DebugLog.Log($"  ClipPlaneSet type: {clipPlaneSet?.GetType().FullName}");
+
+                        if (clipPlaneSet != null)
+                        {
+                            Type setType = clipPlaneSet.GetType();
+
+                            // List all properties
+                            DebugLog.Log("  --- Properties ---");
+                            foreach (var prop in setType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                            {
+                                try
+                                {
+                                    object val = prop.GetValue(clipPlaneSet);
+                                    DebugLog.Log($"    {prop.Name} = {val}");
+                                }
+                                catch { DebugLog.Log($"    {prop.Name} = (error)"); }
+                            }
+
+                            // List all methods
+                            DebugLog.Log("  --- Methods ---");
+                            foreach (var method in setType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                            {
+                                if (!method.Name.StartsWith("get_") && !method.Name.StartsWith("set_"))
+                                {
+                                    var parms = method.GetParameters();
+                                    string sig = string.Join(", ", parms.Select(p => p.ParameterType.Name));
+                                    DebugLog.Log($"    {method.Name}({sig})");
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        DebugLog.Log("  InternalClipPlanes property not found");
+                    }
+
+                    // Also check ActiveView for sectioning toggle
+                    DebugLog.Log("=== ActiveView DISCOVERY ===");
+                    var activeView = doc.ActiveView;
+                    Type avType = activeView.GetType();
+                    foreach (var prop in avType.GetProperties())
+                    {
+                        if (prop.Name.ToLower().Contains("clip") ||
+                            prop.Name.ToLower().Contains("section") ||
+                            prop.Name.ToLower().Contains("plane"))
+                        {
+                            try
+                            {
+                                object val = prop.GetValue(activeView);
+                                DebugLog.Log($"  ActiveView.{prop.Name} = {val}");
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    DebugLog.Log($"DiscoverClipPlaneSetMethods failed: {e.Message}");
+                }
+            }
+
+            public static void DiscoverViewpointClipping(Document doc)
+            {
+                try
+                {
+                    DebugLog.Log("=== VIEWPOINT CLIPPING PROPERTIES ===");
+
+                    Viewpoint vp = doc.CurrentViewpoint.ToViewpoint();
+                    Type vpType = vp.GetType();
+
+                    foreach (var prop in vpType.GetProperties())
+                    {
+                        if (prop.Name.ToLower().Contains("clip") ||
+                            prop.Name.ToLower().Contains("section") ||
+                            prop.Name.ToLower().Contains("plane"))
+                        {
+                            try
+                            {
+                                object val = prop.GetValue(vp);
+                                DebugLog.Log($"  {prop.Name} = {val}");
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    DebugLog.Log($"DiscoverViewpointClipping failed: {e.Message}");
+                }
+            }
+
+            public static void DiscoverClippingPlanes(InwOpState10 comState)
+            {
+                try
+                {
+                    object view = comState.CurrentView;
+                    object clipPlanes = Invoke(view, "ClippingPlanes");
+
+                    DebugLog.Log("=== CLIPPING PLANES MEMBERS ===");
+
+                    // Try common property/method names
+                    string[] names = { "Count", "Enabled", "Linked", "Current", "Planes",
+                          "AddPlane", "RemovePlane", "Add", "Remove", "Clear",
+                          "Item", "GetPlane", "CreatePlane", "Mode" };
+
+                    foreach (string name in names)
+                    {
+                        try
+                        {
+                            object result = Get(clipPlanes, name);
+                            DebugLog.Log($"  Property '{name}' = {result}");
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                object result = Invoke(clipPlanes, name);
+                                DebugLog.Log($"  Method '{name}()' = {result}");
+                            }
+                            catch { }
+                        }
+                    }
+
+                    // Also try to create a clip plane object and discover its members
+                    try
+                    {
+                        object plane = comState.ObjectFactory(nwEObjectType.eObjectType_nwOaClipPlane, null, null);
+                        DebugLog.Log($"ClipPlane created: {plane.GetType().FullName}");
+
+                        string[] planeNames = { "Plane", "Enabled", "Distance", "Normal", "Equation", "SetValue", "GetValue" };
+                        foreach (string name in planeNames)
+                        {
+                            try
+                            {
+                                object result = Get(plane, name);
+                                DebugLog.Log($"  Plane.{name} = {result}");
+                            }
+                            catch { }
+                        }
+                        Marshal.ReleaseComObject(plane);
+                    }
+                    catch (Exception e)
+                    {
+                        DebugLog.Log($"  ClipPlane creation failed: {e.Message}");
+                    }
+                }
+                catch (Exception e)
+                {
+                    DebugLog.Log($"DiscoverClippingPlanes failed: {e.Message}");
+                }
+            }
+
+            public static void EnableSectioningForAllViewpoints(Document doc, string folderName)
+            {
+                try
+                {
+                    DebugLog.Log("=== Enabling Sectioning for All Saved Viewpoints ===");
+
+                    GroupItem folder = ClashHelper.FindNetFolder(doc, folderName);
+                    if (folder == null) return;
+
+                    foreach (SavedItem item in folder.Children)
+                    {
+                        if (item is SavedViewpoint savedVp)
+                        {
+                            // Load the viewpoint
+                            doc.CurrentViewpoint.CopyFrom(savedVp.Viewpoint);
+
+                            // Get current viewpoint and enable sectioning on it
+                            Viewpoint vp = doc.CurrentViewpoint.ToViewpoint().CreateCopy();
+                            Type vpType = vp.GetType();
+                            PropertyInfo internalProp = vpType.GetProperty("InternalClipPlanes",
+                                BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+                            if (internalProp != null)
+                            {
+                                dynamic clipPlaneSet = internalProp.GetValue(vp);
+                                clipPlaneSet.SetEnabled(true);
+                                clipPlaneSet.SetLinked(true);
+
+                                // Apply back and save
+                                doc.CurrentViewpoint.CopyFrom(vp);
+                            }
+
+                            DebugLog.Log($"  Enabled: {savedVp.DisplayName}");
+                        }
+                    }
+
+                    DebugLog.Log("=== Sectioning Enabled ===");
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Log($"EnableSectioningForAllViewpoints error: {ex.Message}");
+                }
+            }
+            public static void SaveViewpointWithSection(InwOpState10 comState, string name)
+            {
+                try
+                {
+                    object savedViewsColl = comState.SavedViews();
+                    object currentView = Get(comState, "CurrentView");
+
+                    // Create a copy of current view state (includes clipping)
+                    object newViewpoint = Invoke(savedViewsColl, "CreateCopy", currentView);
+                    Set(newViewpoint, "Name", name);
+
+                    Invoke(savedViewsColl, "Add", newViewpoint);
+
+                    DebugLog.Log($"  COM Viewpoint saved: {name}");
+                }
+                catch (Exception e)
+                {
+                    DebugLog.Log($"  COM SaveViewpoint failed: {e.Message}");
+                }
+            }
             public static void Set(object obj, string prop, object value)
             {
                 obj.GetType().InvokeMember(prop, BF.SetProperty, null, obj, new[] { value });
             }
 
-            public static void SetSectionPlane(InwOpState10 comState, double z)
+
+
+            public static void SetSectionPlaneNet(Document doc, double z)
             {
-                object view = comState.CurrentView;
-                object clipPlanes = Invoke(view, "ClippingPlanes");
-
-                // Clear existing
-                int count = (int)Get(clipPlanes, "Count");
-                while (count > 0)
+                try
                 {
-                    Invoke(clipPlanes, "RemovePlane", 1);
-                    count = (int)Get(clipPlanes, "Count");
+                    // Get the current viewpoint and make a copy we can modify
+                    Viewpoint vp = doc.CurrentViewpoint.ToViewpoint().CreateCopy();
+
+                    // Access InternalClipPlanes via reflection
+                    Type vpType = vp.GetType();
+                    PropertyInfo internalProp = vpType.GetProperty("InternalClipPlanes",
+                        BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+                    if (internalProp == null)
+                    {
+                        DebugLog.Log("  InternalClipPlanes not found");
+                        return;
+                    }
+
+                    dynamic clipPlaneSet = internalProp.GetValue(vp);
+
+                    // Enable sectioning and link to viewpoint
+                    clipPlaneSet.SetEnabled(true);
+                    clipPlaneSet.SetLinked(true);
+
+                    // Apply the modified viewpoint back
+                    doc.CurrentViewpoint.CopyFrom(vp);
+
+                    DebugLog.Log($"  Section ENABLED at Z={z:F3}");
                 }
-
-                // Create plane
-                object plane = comState.ObjectFactory(
-                    nwEObjectType.eObjectType_nwOaClipPlane, null, null);
-                object planeGeom = Get(plane, "Plane");
-                Invoke(planeGeom, "SetValue", 0.0, 0.0, 1.0, -z);
-                Set(plane, "Enabled", true);
-                Invoke(clipPlanes, "AddPlane", plane);
-                Set(clipPlanes, "Enabled", true);
-
-                Marshal.ReleaseComObject(plane);
+                catch (Exception ex)
+                {
+                    DebugLog.Log($"  SetSectionPlaneNet error: {ex.Message}");
+                }
             }
 
             public static void DisableSectioning(InwOpState10 comState)
@@ -391,6 +704,16 @@ namespace SectionPlaneZoom
                 return null;
             }
 
+            public static GroupItem FindNetFolder(Document doc, string folderName)
+            {
+                foreach (SavedItem item in doc.SavedViewpoints.Value)
+                {
+                    if (item is GroupItem gi && gi.DisplayName == folderName)
+                        return gi;
+                }
+                return null;
+            }
+
             public static List<ClashResult> GetFilteredClashResults(ClashTest test)
             {
                 List<ClashResult> results = new List<ClashResult>();
@@ -435,15 +758,7 @@ namespace SectionPlaneZoom
                 throw new InvalidOperationException("Failed to create viewpoint folder.");
             }
 
-            private static GroupItem FindNetFolder(Document doc, string folderName)
-            {
-                foreach (SavedItem item in doc.SavedViewpoints.Value)
-                {
-                    if (item is GroupItem gi && gi.DisplayName == folderName)
-                        return gi;
-                }
-                return null;
-            }
+            
 
             public static void CreateViewPointForClash(
                 Document doc, ClashResult clash, InwOpState10 comState)
@@ -482,21 +797,21 @@ namespace SectionPlaneZoom
                 comState.ZoomInCurViewOnCurSel();
                 DebugLog.Log($"  Zoomed.");
 
-                // 4. Section plane via reflection
+                // 4. Section plane - apply to viewpoint we're about to save
+                Viewpoint currentViewpoint = doc.CurrentViewpoint.ToViewpoint();
+                Viewpoint vpWithSection = null;
                 try
                 {
-                    ComHelper.SetSectionPlane(comState, clashPoint.Z);
-                    DebugLog.Log($"  Section plane at Z={clashPoint.Z:F3}");
+                    vpWithSection = ComHelper.SetSectionPlaneOnViewpoint(doc, currentViewpoint, clashPoint.Z);
                 }
                 catch (Exception secEx)
                 {
                     DebugLog.Log($"  Section plane FAILED: {secEx.Message}");
-                    // Continue — still save viewpoint
+                    vpWithSection = currentViewpoint; // fallback to original
                 }
 
-                // 5. Save viewpoint via .NET
-                Viewpoint currentViewpoint = doc.CurrentViewpoint.ToViewpoint();
-                SavedViewpoint savedVP = new SavedViewpoint(currentViewpoint);
+                // 5. Save the MODIFIED viewpoint
+                SavedViewpoint savedVP = new SavedViewpoint(vpWithSection);  // <-- use vpWithSection, not currentViewpoint
                 savedVP.DisplayName = clash.DisplayName;
 
                 GroupItem netFolder = FindNetFolder(doc, "Clash Section Views");
@@ -513,8 +828,8 @@ namespace SectionPlaneZoom
                 }
 
                 // 6. Reset
-                doc.Models.ResetPermanentMaterials(clashElements);
-                doc.CurrentSelection.Clear();
+                //doc.Models.ResetPermanentMaterials(clashElements);
+                //doc.CurrentSelection.Clear();
 
                 DebugLog.Save();
             }
