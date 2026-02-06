@@ -6,7 +6,7 @@ using Autodesk.Navisworks.Api.Plugins;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;   
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -154,7 +154,7 @@ namespace SectionPlaneZoom
                 lblProgress.Text = $"{current} / {total}";
                 lblStatus.Text = message;
                 this.Refresh();
-               
+
             }
         }
 
@@ -259,7 +259,7 @@ namespace SectionPlaneZoom
                 }
                 return false;
             }
-            public static GroupItem CreateViewPointFolder(Document doc, string folderName) 
+            public static GroupItem CreateViewPointFolder(Document doc, string folderName)
             {
 
                 foreach (SavedItem item in doc.SavedViewpoints.Value)
@@ -270,7 +270,7 @@ namespace SectionPlaneZoom
                     }
                 }
 
-                FolderItem folder = new FolderItem {DisplayName = folderName };
+                FolderItem folder = new FolderItem { DisplayName = folderName };
                 doc.SavedViewpoints.AddCopy(folder);
 
                 SavedItem added = doc.SavedViewpoints.Value[doc.SavedViewpoints.Value.Count - 1];
@@ -292,7 +292,7 @@ namespace SectionPlaneZoom
                     clipPlanes.Enabled = false;
                     while (clipPlanes.Count > 0) clipPlanes.RemovePlane(1);
                 }
-                catch(Exception e)
+                catch (Exception e)
                 {
                     System.Diagnostics.Debug.WriteLine($"DisableSectioning failed: {e.Message}");
                 }
@@ -391,7 +391,7 @@ namespace SectionPlaneZoom
             }
         }
 
-               
+
 
     }
 
