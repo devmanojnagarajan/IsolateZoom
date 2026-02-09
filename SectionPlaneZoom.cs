@@ -405,48 +405,41 @@ namespace SectionPlaneZoom
                 return results;
             }
 
-            private static void EnableSectioning(bool enable)
+            private static void SetSectionPlaneAtClash(double clashZ, bool enable)
             {
                 try
                 {
                     var activeView = Autodesk.Navisworks.Api.Application.ActiveDocument.ActiveView;
-                    string json = activeView.GetClippingPlanes();
 
-                    // Log it so we can see the structure
-                    DebugLog.Log($"  ClipPlanes JSON before: {json}");
-
-                    if (string.IsNullOrEmpty(json) || json == "{}")
+                    if (enable)
                     {
-                        DebugLog.Log($"  No clipping planes exist yet.");
-                        return;
+                        // Distance must be NEGATIVE of the Z coordinate
+                        double distance = -clashZ;
+                        string distStr = distance.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+
+                        string json = "{\"Type\":\"ClipPlaneSet\",\"Version\":1," +
+                            "\"Planes\":[{\"Type\":\"ClipPlane\",\"Version\":1," +
+                            "\"Normal\":[0,0,-1]," +
+                            "\"Distance\":" + distStr + "," +
+                            "\"Enabled\":true}]," +
+                            "\"Linked\":false,\"Enabled\":true}";
+
+                        activeView.SetClippingPlanes(json);
+                        DebugLog.Log($"  SetClippingPlanes: Plane1 at Z={clashZ:F3}, Distance={distance:F3}, Enabled=true");
                     }
-
-                    // Parse the JSON
-                    var clipData = Newtonsoft.Json.Linq.JObject.Parse(json);
-
-                    // "Enabled" at root = master sectioning toggle (Viewpoint > Enable Sectioning)
-                    clipData["Enabled"] = enable;
-
-                    // "Planes" array = the 6 section planes
-                    var planes = clipData["Planes"] as Newtonsoft.Json.Linq.JArray;
-                    if (planes != null && planes.Count > 0)
+                    else
                     {
-                        // Enable ONLY Plane 1 (index 0), disable the rest
-                        for (int i = 0; i < planes.Count; i++)
-                        {
-                            planes[i]["Enabled"] = (i == 0) && enable;
-                        }
+                        string json = "{\"Type\":\"ClipPlaneSet\",\"Version\":1," +
+                            "\"Planes\":[]," +
+                            "\"Linked\":false,\"Enabled\":false}";
+
+                        activeView.SetClippingPlanes(json);
+                        DebugLog.Log($"  SetClippingPlanes: Cleared");
                     }
-
-                    string updated = clipData.ToString();
-                    activeView.SetClippingPlanes(updated);
-
-                    DebugLog.Log($"  ClipPlanes JSON after: {updated}");
-                    DebugLog.Log($"  EnableSectioning({enable}) OK - Plane 1 only");
                 }
                 catch (Exception ex)
                 {
-                    DebugLog.Log($"  EnableSectioning({enable}) FAILED: {ex.Message}");
+                    DebugLog.Log($"  SetSectionPlaneAtClash FAILED: {ex.Message}");
                 }
             }
 
@@ -535,16 +528,7 @@ namespace SectionPlaneZoom
                 DebugLog.Log($"  Zoomed.");
 
                 // 4. Section plane via reflection
-                try
-                {
-                    ComHelper.SetSectionPlane(comState, clashPoint.Z);
-                    DebugLog.Log($"  Section plane at Z={clashPoint.Z:F3}");
-                }
-                catch (Exception secEx)
-                {
-                    DebugLog.Log($"  Section plane FAILED: {secEx.Message}");
-                    // Continue — still save viewpoint
-                }
+                SetSectionPlaneAtClash(clashPoint.Z, true);
 
                 // 5. enable clipping planes in viewpoints
                 //EnableSectioning(true);
@@ -571,7 +555,7 @@ namespace SectionPlaneZoom
                 }
 
                 // 6. Reset
-                //EnableSectioning(false);
+                SetSectionPlaneAtClash(0, false);
                 doc.Models.ResetPermanentMaterials(clashElements);
                 doc.CurrentSelection.Clear();
 
