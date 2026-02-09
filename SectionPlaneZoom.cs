@@ -16,6 +16,8 @@ using ComBridge = Autodesk.Navisworks.Api.ComApi.ComApiBridge;
 using wf = System.Windows.Forms;
 using NavisColor = Autodesk.Navisworks.Api.Color;
 using BF = System.Reflection.BindingFlags;
+using Autodesk.Navisworks.Api.Interop;
+
 
 
 namespace SectionPlaneZoom
@@ -84,6 +86,11 @@ namespace SectionPlaneZoom
             GroupItem folder = ClashHelper.CreateViewPointFolder(doc, "Clash Section Views");
             DebugLog.Log($"Folder ready: '{folder.DisplayName}', existing children: {folder.Children.Count}");
             DebugLog.Save();
+
+            // === TEMPORARY: Log what a manual plane looks like ===
+            string manualJson = Autodesk.Navisworks.Api.Application.ActiveDocument.ActiveView.GetClippingPlanes();
+            DebugLog.Log($"MANUAL PLANE JSON: {manualJson}");
+            // === END TEMPORARY ===
 
             using (ProgressForm progress = new ProgressForm(results.Count))
             {
@@ -398,6 +405,51 @@ namespace SectionPlaneZoom
                 return results;
             }
 
+            private static void EnableSectioning(bool enable)
+            {
+                try
+                {
+                    var activeView = Autodesk.Navisworks.Api.Application.ActiveDocument.ActiveView;
+                    string json = activeView.GetClippingPlanes();
+
+                    // Log it so we can see the structure
+                    DebugLog.Log($"  ClipPlanes JSON before: {json}");
+
+                    if (string.IsNullOrEmpty(json) || json == "{}")
+                    {
+                        DebugLog.Log($"  No clipping planes exist yet.");
+                        return;
+                    }
+
+                    // Parse the JSON
+                    var clipData = Newtonsoft.Json.Linq.JObject.Parse(json);
+
+                    // "Enabled" at root = master sectioning toggle (Viewpoint > Enable Sectioning)
+                    clipData["Enabled"] = enable;
+
+                    // "Planes" array = the 6 section planes
+                    var planes = clipData["Planes"] as Newtonsoft.Json.Linq.JArray;
+                    if (planes != null && planes.Count > 0)
+                    {
+                        // Enable ONLY Plane 1 (index 0), disable the rest
+                        for (int i = 0; i < planes.Count; i++)
+                        {
+                            planes[i]["Enabled"] = (i == 0) && enable;
+                        }
+                    }
+
+                    string updated = clipData.ToString();
+                    activeView.SetClippingPlanes(updated);
+
+                    DebugLog.Log($"  ClipPlanes JSON after: {updated}");
+                    DebugLog.Log($"  EnableSectioning({enable}) OK - Plane 1 only");
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Log($"  EnableSectioning({enable}) FAILED: {ex.Message}");
+                }
+            }
+
             private static void CollectClashResults(SavedItemCollection items, List<ClashResult> results)
             {
                 foreach (SavedItem item in items)
@@ -494,10 +546,16 @@ namespace SectionPlaneZoom
                     // Continue — still save viewpoint
                 }
 
-                // 5. Save viewpoint via .NET
+                // 5. enable clipping planes in viewpoints
+                //EnableSectioning(true);
+
+
+                // 6. Save viewpoint via .NET
                 Viewpoint currentViewpoint = doc.CurrentViewpoint.ToViewpoint();
                 SavedViewpoint savedVP = new SavedViewpoint(currentViewpoint);
                 savedVP.DisplayName = clash.DisplayName;
+
+                
 
                 GroupItem netFolder = FindNetFolder(doc, "Clash Section Views");
                 if (netFolder != null)
@@ -513,6 +571,7 @@ namespace SectionPlaneZoom
                 }
 
                 // 6. Reset
+                //EnableSectioning(false);
                 doc.Models.ResetPermanentMaterials(clashElements);
                 doc.CurrentSelection.Clear();
 
