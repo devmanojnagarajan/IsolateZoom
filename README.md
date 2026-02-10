@@ -1,71 +1,164 @@
-SectionPlaneZoom for Autodesk Navisworks
-<img width="1918" height="118" alt="image" src="https://github.com/user-attachments/assets/397e5c06-2df7-4410-a7ea-49a7e7473261" />
+# SectionPlaneZoom for Autodesk Navisworks
 
-SectionPlaneZoom is a Navisworks Add-in designed to streamline the clash review process. It automatically iterates through clash test results, creates a section plane at the exact clash elevation, zooms into the conflicting elements, and saves a dedicated viewpoint for easier coordination.
+SectionPlaneZoom is a Navisworks add-in that automates clash review visualization.  
+It iterates through clash test results, creates a horizontal section plane at the exact clash elevation, zooms into the conflicting elements, and saves dedicated viewpoints and selection sets for faster coordination.
 
-<img width="341" height="148" alt="image" src="https://github.com/user-attachments/assets/a1081c8c-a1ef-42ba-a0eb-792dc75b4b7f" />
+---
 
-🚀 Key Features
-* Automatic Folder Management: Creates organized viewpoint folders ("Clash Section Views") and Selection Sets ("Clash Section Sets").
-* Smart Sectioning: Uses the Navisworks JSON API to generate horizontal section planes at the precise $Z$ coordinate of the clash.
-* Visual Highlights: Temporarily overrides element colors to red during the generation process for clear identification.
-* Selection Set Sync: Generates a matching Selection Set for every viewpoint so you can instantly select the clashing items later.
-* Progress Tracking: Includes a real-time progress bar with a cancel option for large clash tests.
+## 📸 Overview
 
-<img width="180" height="450" alt="image" src="https://github.com/user-attachments/assets/294c84eb-6093-4be3-9933-5a0b9ccd63d2" />
+<img width="1918" height="118" alt="Overview" src="https://github.com/user-attachments/assets/397e5c06-2df7-4410-a7ea-49a7e7473261" />
 
-🛠️ How It Works (Technical Overview)
-The plugin leverages both the .NET API and the COM API Bridge to achieve results that standard .NET methods cannot easily handle:
+<img width="341" height="148" alt="UI" src="https://github.com/user-attachments/assets/a1081c8c-a1ef-42ba-a0eb-792dc75b4b7f" />
 
-Selection & Zoom: It identifies the clashing ModelItems and uses comState.ZoomInCurViewOnCurSel() for a perfect frame.
+---
 
-JSON Clipping: It bypasses traditional COM limitations by injecting a ClipPlaneSet via JSON:
+## 🚀 Key Features
 
-JSON
-{ "Type": "ClipPlaneSet", "Planes": [{ "Normal": [0,0,-1], "Distance": -clashZ }] }
-Viewpoint Persistence: It uses ReplaceFromCurrentView to ensure that the active clipping planes and redlines are baked into the saved viewpoint.
+### 📁 Automatic Folder Management
+- Creates structured Saved Viewpoints folder: **Clash Section Views**
+- Creates structured Selection Sets folder: **Clash Section Sets**
 
-Clean Up: After saving, it resets the model materials and clears the selection to leave the workspace ready for the next task.
+### ✂️ Smart Sectioning
+- Generates horizontal section planes at precise clash **Z elevation**
+- Uses Navisworks JSON API for accurate clipping
 
-<img width="1913" height="298" alt="image" src="https://github.com/user-attachments/assets/16271086-a1c6-4463-a5fa-4eebf52ebaa7" />
+### 🎯 Visual Highlights
+- Temporarily overrides clash elements to **red**
+- Improves visual clarity during generation
 
-📖 How to Use
-1. Run the Plugin
-In Navisworks, navigate to the Tool Add-ins tab and click on SectionPlaneZoom.
+### 🔗 Selection Set Sync
+- Creates a matching Selection Set for every viewpoint
+- Allows instant re-selection of clash elements
 
-2. Select Your Clash Test
-If your file contains multiple clash tests, a dialog box will appear. Select the specific test you wish to process and click OK.
+### 📊 Progress Tracking
+- Real-time processing progress bar
+- Displays current clash name
+- Includes cancel option for large clash tests
 
-3. Processing
-The plugin will begin iterating through all New, Active, and Reviewed clashes. A progress bar will show you the current status and the name of the clash being processed.
+<img width="180" height="450" alt="Progress UI" src="https://github.com/user-attachments/assets/294c84eb-6093-4be3-9933-5a0b9ccd63d2" />
 
-4. Review Results
-Once complete, check your Saved Viewpoints window and Selection Sets window.
+---
 
-Viewpoints: You will find a new folder called Clash Section Views. Every viewpoint is sectioned horizontally at the clash point.
+## 🛠️ Technical Overview
 
-Selection Sets: A corresponding folder Clash Section Sets will contain the items involved in each clash for quick selection.
+The plugin uses a hybrid approach combining the **Navisworks .NET API** and the **COM API Bridge** to achieve advanced functionality.
 
-<img width="1338" height="976" alt="image" src="https://github.com/user-attachments/assets/b61d2b9f-d209-423b-90b3-3c348323203c" />
+### 🔍 Selection & Zoom
+Identifies clashing `ModelItems` and frames them precisely using:
 
-📋 Requirements
-Autodesk Navisworks Manage (2018 or newer recommended).
-A default view will all elements active and section plane turned off.
-Clash Detective data must be present in the active document.
+```
+comState.ZoomInCurViewOnCurSel()
+```
 
-<img width="1342" height="970" alt="image" src="https://github.com/user-attachments/assets/e85c135c-c94a-4f8d-9982-2db4c57f4a92" />
-📂 Installation
-To install the plugin manually, you need to place the compiled .dll (and any dependencies) into the Navisworks Plugins directory.
+### ✂️ JSON Clip Plane Injection
+Creates clipping planes using JSON:
 
-1. Locate the Plugins Folder
-Navisworks looks for plugins in the %AppData% directory. Paste the following path into your File Explorer address bar: %AppData%\Autodesk\Navisworks Manage 2024\Plugins\
+```json
+{
+  "Type": "ClipPlaneSet",
+  "Planes": [
+    { "Normal": [0,0,-1], "Distance": -clashZ }
+  ]
+}
+```
 
-Note: Replace 2024 with your specific version (e.g., 2023, 2025).
+### 🧹 Cleanup
+After saving viewpoints:
+- model materials reset
+- selections cleared
+- workspace restored
 
-2. Create a Subfolder
-Inside the Plugins folder, create a new folder named exactly SectionPlaneZoom.
+<img width="1913" height="298" alt="Technical Workflow" src="https://github.com/user-attachments/assets/16271086-a1c6-4463-a5fa-4eebf52ebaa7" />
 
-Important: The folder name must match the name of your .dll file for Navisworks to load it correctly.
+---
 
-3. Copy the DLL
-Place your SectionPlaneZoom.dll into that new folder.
+## 📖 How to Use
+
+### 1️⃣ Run the Plugin
+In Navisworks:
+
+```
+Tool Add-ins → SectionPlaneZoom
+```
+
+### 2️⃣ Select Clash Test
+If multiple clash tests exist:
+- A selection dialog appears
+- Choose the desired test
+- Click OK
+
+### 3️⃣ Processing
+The plugin processes:
+- New clashes
+- Active clashes
+- Reviewed clashes
+
+A progress window shows:
+- current clash
+- processing status
+
+### 4️⃣ Review Results
+
+#### Saved Viewpoints
+```
+Clash Section Views
+```
+Each viewpoint is sectioned at clash elevation.
+
+#### Selection Sets
+```
+Clash Section Sets
+```
+Each set contains clash elements for quick selection.
+
+<img width="1338" height="976" alt="Results" src="https://github.com/user-attachments/assets/b61d2b9f-d209-423b-90b3-3c348323203c" />
+
+---
+
+## 📋 Requirements
+- Autodesk Navisworks Manage (2018 or newer recommended)
+- Default view with:
+  - all elements active
+  - section planes disabled
+- Clash Detective data present in the active document
+
+<img width="1342" height="970" alt="Requirements" src="https://github.com/user-attachments/assets/e85c135c-c94a-4f8d-9982-2db4c57f4a92" />
+
+---
+
+## 📂 Installation
+
+### Step 1 — Locate Plugins Directory
+Paste into Windows File Explorer:
+
+```
+%AppData%\Autodesk\Navisworks Manage 2024\Plugins\
+```
+
+Replace **2024** with your Navisworks version.
+
+### Step 2 — Create Plugin Folder
+Create a folder named exactly:
+
+```
+SectionPlaneZoom
+```
+
+⚠️ Folder name must match the DLL filename.
+
+### Step 3 — Copy Plugin Files
+Place inside the folder:
+
+```
+SectionPlaneZoom.dll
++ any dependency files
+```
+
+Restart Navisworks.
+
+The plugin will appear under:
+
+```
+Tool Add-ins
+```
