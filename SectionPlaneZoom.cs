@@ -645,10 +645,11 @@ namespace SectionPlaneZoom
                 DebugLog.Log($"  Zoomed.");
 
                 // 4. Section plane using json
-                SetSectionPlaneAtClash(clashPoint.Z, true);                
+                SetSectionPlaneAtClash(clashPoint.Z, true);
 
                 // 5. Add redline circle
                 //AddRedlineCircleToActiveView();
+                activeView.SetRedlines("{\"Type\":\"RedlineCollection\",\"Version\":1,\"Values\":[]}");
 
                 //Create matching selection set
                 CreateSelectionSetForClash(doc, clash, clashElements);
@@ -684,7 +685,7 @@ namespace SectionPlaneZoom
 
                 // 7. Reset
 
-                //activeView.SetRedlines("{\"Type\":\"RedlineCollection\",\"Version\":1,\"Values\":[]}");
+                
                 SetSectionPlaneAtClash(0, false);
 
                 doc.Models.ResetPermanentMaterials(clashElements);
