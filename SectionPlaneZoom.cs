@@ -33,8 +33,8 @@ namespace SectionPlaneZoom
             Document doc = Autodesk.Navisworks.Api.Application.ActiveDocument;
             if (doc == null) return 0;
 
-            DebugLog.Reset();
-            DebugLog.Log("=== Clash VP - Section Started ===");
+            //DebugLog.Reset();
+            //DebugLog.Log("=== Clash VP - Section Started ===");
 
             DocumentClash clashDoc = doc.GetClash();
             if (clashDoc == null || clashDoc.TestsData?.Tests == null || clashDoc.TestsData.Tests.Count == 0)
@@ -46,10 +46,10 @@ namespace SectionPlaneZoom
             var selectedTest = ClashHelper.ClashTestSelect(clashDoc.TestsData.Tests);
             if (selectedTest == null) return 0;
 
-            DebugLog.Log($"Selected test: {selectedTest.DisplayName}");
+            //DebugLog.Log($"Selected test: {selectedTest.DisplayName}");
 
             List<ClashResult> results = ClashHelper.GetFilteredClashResults(selectedTest);
-            DebugLog.Log($"Found {results.Count} clashes with status New/Active/Reviewed");
+            //DebugLog.Log($"Found {results.Count} clashes with status New/Active/Reviewed");
 
             if (results.Count == 0)
             {
@@ -62,23 +62,23 @@ namespace SectionPlaneZoom
             //ComHelper.DiscoverViewMethods(comState);
             //ComHelper.DiscoverViewpointClipping(doc);
             //ComHelper.DiscoverClippingPlanes(comState);
-            ComHelper.DiscoverClipPlaneSetMethods(doc);
+            //ComHelper.DiscoverClipPlaneSetMethods(doc);
 
 
-
+            /*
             // === COM API Discovery ===
-            DebugLog.Log("--- COM API Discovery ---");
+            //DebugLog.Log("--- COM API Discovery ---");
             try
             {
                 object view = comState.CurrentView;
-                DebugLog.Log($"CurrentView type: {view.GetType().FullName}");
+                //DebugLog.Log($"CurrentView type: {view.GetType().FullName}");
 
                 foreach (Type iface in view.GetType().GetInterfaces())
                     DebugLog.Log($"  Interface: {iface.FullName}");
 
                 object cp = view.GetType().InvokeMember("ClippingPlanes",
                     BF.InvokeMethod, null, view, null);
-                DebugLog.Log($"ClippingPlanes type: {cp.GetType().FullName}");
+                //DebugLog.Log($"ClippingPlanes type: {cp.GetType().FullName}");
 
                 foreach (Type iface in cp.GetType().GetInterfaces())
                     DebugLog.Log($"  CP Interface: {iface.FullName}");
@@ -89,16 +89,17 @@ namespace SectionPlaneZoom
             }
             DebugLog.Log("--- End Discovery ---");
             DebugLog.Save();
+            */
 
             // Create/find the viewpoint folder
             GroupItem folder = ClashHelper.CreateViewPointFolder(doc, "Clash Section Views");
-            DebugLog.Log($"Folder ready: '{folder.DisplayName}', existing children: {folder.Children.Count}");
-            DebugLog.Save();
+            //DebugLog.Log($"Folder ready: '{folder.DisplayName}', existing children: {folder.Children.Count}");
+            //DebugLog.Save();
 
 
             // -- Check redlines -- //
             string redlineJson = Autodesk.Navisworks.Api.Application.ActiveDocument.ActiveView.GetRedlines();
-            DebugLog.Log($"MANUAL REDLINE JSON: {redlineJson}");
+            //DebugLog.Log($"MANUAL REDLINE JSON: {redlineJson}");
 
             using (ProgressForm progress = new ProgressForm(results.Count))
             {
@@ -122,13 +123,13 @@ namespace SectionPlaneZoom
                     {
                         string detail = $"{clash.DisplayName} | {ex.GetType().Name}: {ex.Message}";
                         failedClashes.Add(detail);
-                        DebugLog.Log($"EXCEPTION: {detail}");
-                        DebugLog.Save();
+                        //DebugLog.Log($"EXCEPTION: {detail}");
+                        //DebugLog.Save();
                     }
                 }
 
 
-                DebugLog.Log($"Loop complete: {successCount} succeeded, {failedClashes.Count} failed");
+                //DebugLog.Log($"Loop complete: {successCount} succeeded, {failedClashes.Count} failed");
 
                 if (failedClashes.Count > 0)
                 {
@@ -151,8 +152,8 @@ namespace SectionPlaneZoom
             //not working enable sectioning
             //ComHelper.EnableSectioningForAllViewpoints(doc, "Clash Section Views");
 
-            DebugLog.Log("=== Finished ===");
-            DebugLog.Save();
+            //DebugLog.Log("=== Finished ===");
+            //DebugLog.Save();
             return 0;
         }
 
@@ -180,87 +181,11 @@ namespace SectionPlaneZoom
                 }
                 catch (Exception ex)
                 {
-                    DebugLog.Log($"  DisableSectioningNet failed: {ex.Message}");
+                    //DebugLog.Log($"  DisableSectioningNet failed: {ex.Message}");
                 }
             }           
 
-
-            public static void DiscoverClipPlaneSetMethods(Document doc)
-            {
-                try
-                {
-                    DebugLog.Log("=== LcOaClipPlaneSet DISCOVERY ===");
-
-                    Viewpoint vp = doc.CurrentViewpoint.ToViewpoint();
-
-                    // Get the internal clip planes via reflection
-                    Type vpType = vp.GetType();
-                    PropertyInfo internalProp = vpType.GetProperty("InternalClipPlanes",
-                        BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-
-                    if (internalProp != null)
-                    {
-                        object clipPlaneSet = internalProp.GetValue(vp);
-                        DebugLog.Log($"  ClipPlaneSet type: {clipPlaneSet?.GetType().FullName}");
-
-                        if (clipPlaneSet != null)
-                        {
-                            Type setType = clipPlaneSet.GetType();
-
-                            // List all properties
-                            DebugLog.Log("  --- Properties ---");
-                            foreach (var prop in setType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-                            {
-                                try
-                                {
-                                    object val = prop.GetValue(clipPlaneSet);
-                                    DebugLog.Log($"    {prop.Name} = {val}");
-                                }
-                                catch { DebugLog.Log($"    {prop.Name} = (error)"); }
-                            }
-
-                            // List all methods
-                            DebugLog.Log("  --- Methods ---");
-                            foreach (var method in setType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
-                            {
-                                if (!method.Name.StartsWith("get_") && !method.Name.StartsWith("set_"))
-                                {
-                                    var parms = method.GetParameters();
-                                    string sig = string.Join(", ", parms.Select(p => p.ParameterType.Name));
-                                    DebugLog.Log($"    {method.Name}({sig})");
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        DebugLog.Log("  InternalClipPlanes property not found");
-                    }
-
-                    // Also check ActiveView for sectioning toggle
-                    DebugLog.Log("=== ActiveView DISCOVERY ===");
-                    var activeView = doc.ActiveView;
-                    Type avType = activeView.GetType();
-                    foreach (var prop in avType.GetProperties())
-                    {
-                        if (prop.Name.ToLower().Contains("clip") ||
-                            prop.Name.ToLower().Contains("section") ||
-                            prop.Name.ToLower().Contains("plane"))
-                        {
-                            try
-                            {
-                                object val = prop.GetValue(activeView);
-                                DebugLog.Log($"  ActiveView.{prop.Name} = {val}");
-                            }
-                            catch { }
-                        }
-                    }
-                }
-                catch (Exception e)
-                {
-                    DebugLog.Log($"DiscoverClipPlaneSetMethods failed: {e.Message}");
-                }
-            }      
+                        
 
         }
 
@@ -478,11 +403,11 @@ namespace SectionPlaneZoom
 
                     int idx = folder.Children.Count;
                     doc.SelectionSets.InsertCopy(folder, idx, selSet);
-                    DebugLog.Log($"  SelectionSet created: '{clash.DisplayName}' ({clashElements.Count} items)");
+                    //DebugLog.Log($"  SelectionSet created: '{clash.DisplayName}' ({clashElements.Count} items)");
                 }
                 catch (Exception ex)
                 {
-                    DebugLog.Log($"  SelectionSet FAILED: {ex.Message}");
+                    //DebugLog.Log($"  SelectionSet FAILED: {ex.Message}");
                 }
             }
 
@@ -505,11 +430,11 @@ namespace SectionPlaneZoom
                         "\"MaxPoint\":[" + s + "," + s + "]}]}";
 
                     activeView.SetRedlines(json);
-                    DebugLog.Log($"  Redline circle set on ActiveView");
+                    //DebugLog.Log($"  Redline circle set on ActiveView");
                 }
                 catch (Exception ex)
                 {
-                    DebugLog.Log($"  Redline FAILED: {ex.Message}");
+                    //DebugLog.Log($"  Redline FAILED: {ex.Message}");
                 }
             }
 
@@ -550,7 +475,7 @@ namespace SectionPlaneZoom
                             "\"Linked\":false,\"Enabled\":true}";
 
                         activeView.SetClippingPlanes(json);
-                        DebugLog.Log($"  SetClippingPlanes: Plane1 at Z={clashZ:F3}, Distance={distance:F3}, Enabled=true");
+                        //DebugLog.Log($"  SetClippingPlanes: Plane1 at Z={clashZ:F3}, Distance={distance:F3}, Enabled=true");
                     }
                     else
                     {
@@ -559,12 +484,12 @@ namespace SectionPlaneZoom
                             "\"Linked\":false,\"Enabled\":false}";
 
                         activeView.SetClippingPlanes(json);
-                        DebugLog.Log($"  SetClippingPlanes: Cleared");
+                        //DebugLog.Log($"  SetClippingPlanes: Cleared");
                     }
                 }
                 catch (Exception ex)
                 {
-                    DebugLog.Log($"  SetSectionPlaneAtClash FAILED: {ex.Message}");
+                    //DebugLog.Log($"  SetSectionPlaneAtClash FAILED: {ex.Message}");
                 }
             }
 
@@ -615,11 +540,11 @@ namespace SectionPlaneZoom
                     double.IsNaN(clash.Center.Y) ||
                     double.IsNaN(clash.Center.Z))
                 {
-                    DebugLog.Log($"Skipping '{clash.DisplayName}': Invalid center.");
+                    //DebugLog.Log($"Skipping '{clash.DisplayName}': Invalid center.");
                     return;
                 }
 
-                DebugLog.Log($"Processing '{clash.DisplayName}' [{clash.Status}]");
+                //DebugLog.Log($"Processing '{clash.DisplayName}' [{clash.Status}]");
 
                 // 1. Collect elements
                 ModelItemCollection clashElements = new ModelItemCollection();
@@ -628,7 +553,7 @@ namespace SectionPlaneZoom
 
                 if (clashElements.Count == 0)
                 {
-                    DebugLog.Log($"  Skipping: No elements.");
+                    //DebugLog.Log($"  Skipping: No elements.");
                     return;
                 }
 
@@ -642,7 +567,7 @@ namespace SectionPlaneZoom
                 // 3. Select and zoom
                 doc.CurrentSelection.CopyFrom(clashElements);
                 comState.ZoomInCurViewOnCurSel();
-                DebugLog.Log($"  Zoomed.");
+                //DebugLog.Log($"  Zoomed.");
 
                 // 4. Section plane using json
                 SetSectionPlaneAtClash(clashPoint.Z, true);
@@ -674,12 +599,12 @@ namespace SectionPlaneZoom
                     if (lastAdded is SavedViewpoint svp)
                         doc.SavedViewpoints.ReplaceFromCurrentView(svp);
 
-                    DebugLog.Log($"  Saved (index {idx})");
+                    //DebugLog.Log($"  Saved (index {idx})");
                 }
                 else
                 {
                     doc.SavedViewpoints.AddCopy(savedVP);
-                    DebugLog.Log($"  Saved to root");
+                    //DebugLog.Log($"  Saved to root");
                 }
 
 
@@ -691,7 +616,7 @@ namespace SectionPlaneZoom
                 doc.Models.ResetPermanentMaterials(clashElements);
                 doc.CurrentSelection.Clear();
 
-                DebugLog.Save();
+                //DebugLog.Save();
             }
         }
     }
