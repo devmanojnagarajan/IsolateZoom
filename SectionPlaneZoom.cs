@@ -1,6 +1,8 @@
 ﻿using Autodesk.Navisworks.Api;
 using Autodesk.Navisworks.Api.Clash;
+using Autodesk.Navisworks.Api.ComApi;
 using Autodesk.Navisworks.Api.DocumentParts;
+using Autodesk.Navisworks.Api.Interop;
 using Autodesk.Navisworks.Api.Interop.ComApi;
 using Autodesk.Navisworks.Api.Plugins;
 using System;
@@ -12,11 +14,10 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using ComBridge = Autodesk.Navisworks.Api.ComApi.ComApiBridge;
-using wf = System.Windows.Forms;
-using NavisColor = Autodesk.Navisworks.Api.Color;
 using BF = System.Reflection.BindingFlags;
-using Autodesk.Navisworks.Api.Interop;
+using ComBridge = Autodesk.Navisworks.Api.ComApi.ComApiBridge;
+using NavisColor = Autodesk.Navisworks.Api.Color;
+using wf = System.Windows.Forms;
 
 
 
@@ -94,10 +95,10 @@ namespace SectionPlaneZoom
             DebugLog.Log($"Folder ready: '{folder.DisplayName}', existing children: {folder.Children.Count}");
             DebugLog.Save();
 
-            // === TEMPORARY: Log what a manual plane looks like ===
-            string manualJson = Autodesk.Navisworks.Api.Application.ActiveDocument.ActiveView.GetClippingPlanes();
-            DebugLog.Log($"MANUAL PLANE JSON: {manualJson}");
-            // === END TEMPORARY ===
+
+            // -- Check redlines -- //
+            string redlineJson = Autodesk.Navisworks.Api.Application.ActiveDocument.ActiveView.GetRedlines();
+            DebugLog.Log($"MANUAL REDLINE JSON: {redlineJson}");
 
             using (ProgressForm progress = new ProgressForm(results.Count))
             {
@@ -161,18 +162,6 @@ namespace SectionPlaneZoom
         // ──────────────────────────────────────────────
         public static class ComHelper
         {
-            public static object Invoke(object obj, string method, params object[] args)
-            {
-                return obj.GetType().InvokeMember(method, BF.InvokeMethod, null, obj, args);
-            }
-
-            public static object Get(object obj, string prop)
-            {
-                return obj.GetType().InvokeMember(prop, BF.GetProperty, null, obj, null);
-            }
-
-            
-
             public static void DisableSectioningNet(Document doc)
             {
                 try
@@ -193,9 +182,9 @@ namespace SectionPlaneZoom
                 {
                     DebugLog.Log($"  DisableSectioningNet failed: {ex.Message}");
                 }
-            }
+            }           
 
-            
+
             public static void DiscoverClipPlaneSetMethods(Document doc)
             {
                 try
@@ -399,6 +388,7 @@ namespace SectionPlaneZoom
         // ──────────────────────────────────────────────
         // ClashHelper
         // ──────────────────────────────────────────────
+
         public static class ClashHelper
         {
             public static ClashTest ClashTestSelect(SavedItemCollection tests)
@@ -458,6 +448,69 @@ namespace SectionPlaneZoom
                         return clashTests[combo.SelectedIndex];
                 }
                 return null;
+            }
+
+            public static void CreateSelectionSetForClash(Document doc, ClashResult clash, ModelItemCollection clashElements)
+            {
+                try
+                {
+                    // Create a SelectionSet from the clash elements
+                    SelectionSet selSet = new SelectionSet(clashElements);
+                    selSet.DisplayName = clash.DisplayName; // Same name as viewpoint
+
+                    // Find or create the folder
+                    GroupItem folder = null;
+                    foreach (SavedItem item in doc.SelectionSets.Value)
+                    {
+                        if (item is GroupItem gi && gi.DisplayName == "Clash Section Sets")
+                        {
+                            folder = gi;
+                            break;
+                        }
+                    }
+
+                    if (folder == null)
+                    {
+                        FolderItem newFolder = new FolderItem { DisplayName = "Clash Section Sets" };
+                        doc.SelectionSets.AddCopy(newFolder);
+                        folder = doc.SelectionSets.Value.Last() as GroupItem;
+                    }
+
+                    int idx = folder.Children.Count;
+                    doc.SelectionSets.InsertCopy(folder, idx, selSet);
+                    DebugLog.Log($"  SelectionSet created: '{clash.DisplayName}' ({clashElements.Count} items)");
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Log($"  SelectionSet FAILED: {ex.Message}");
+                }
+            }
+
+            private static void AddRedlineCircleToActiveView()
+            {
+                try
+                {
+                    var activeView = Autodesk.Navisworks.Api.Application.ActiveDocument.ActiveView;
+
+                    // Draw a circle centered on screen (0,0) with ~10% screen radius
+                    double size = 0.10;
+                    string s = size.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+                    string ns = (-size).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+
+                    string json = "{\"Type\":\"RedlineCollection\",\"Version\":1," +
+                        "\"Values\":[{\"Type\":\"RedlineEllipse\",\"Version\":1," +
+                        "\"Thickness\":3," +
+                        "\"Color\":[1,0,0]," +
+                        "\"MinPoint\":[" + ns + "," + ns + "]," +
+                        "\"MaxPoint\":[" + s + "," + s + "]}]}";
+
+                    activeView.SetRedlines(json);
+                    DebugLog.Log($"  Redline circle set on ActiveView");
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Log($"  Redline FAILED: {ex.Message}");
+                }
             }
 
             public static GroupItem FindNetFolder(Document doc, string folderName)
@@ -550,9 +603,7 @@ namespace SectionPlaneZoom
                 if (added is GroupItem groupItem) return groupItem;
 
                 throw new InvalidOperationException("Failed to create viewpoint folder.");
-            }
-
-            
+            }            
 
             public static void CreateViewPointForClash(
                 Document doc, ClashResult clash, InwOpState10 comState)
@@ -582,6 +633,8 @@ namespace SectionPlaneZoom
                 }
 
                 Point3D clashPoint = clash.Center;
+                var activeView = Autodesk.Navisworks.Api.Application.ActiveDocument.ActiveView;
+
 
                 // 2. Highlight red
                 doc.Models.OverridePermanentColor(clashElements, new NavisColor(1.0, 0.0, 0.0));
@@ -591,14 +644,17 @@ namespace SectionPlaneZoom
                 comState.ZoomInCurViewOnCurSel();
                 DebugLog.Log($"  Zoomed.");
 
-                // 4. Section plane via reflection
-                SetSectionPlaneAtClash(clashPoint.Z, true);
+                // 4. Section plane using json
+                SetSectionPlaneAtClash(clashPoint.Z, true);                
 
-                // 5. enable clipping planes in viewpoints
-                //EnableSectioning(true);
+                // 5. Add redline circle
+                //AddRedlineCircleToActiveView();
+
+                //Create matching selection set
+                CreateSelectionSetForClash(doc, clash, clashElements);
 
 
-                // 5. Save viewpoint via .NET
+                // 6. Save viewpoint via .NET
                 Viewpoint currentViewpoint = doc.CurrentViewpoint.ToViewpoint();
                 SavedViewpoint savedVP = new SavedViewpoint(currentViewpoint);
                 savedVP.DisplayName = clash.DisplayName;
@@ -610,6 +666,13 @@ namespace SectionPlaneZoom
                 {
                     int idx = netFolder.Children.Count;
                     doc.SavedViewpoints.InsertCopy(netFolder, idx, savedVP);
+
+
+                    // ReplaceFromCurrentView captures redlines + clip planes into the saved VP
+                    SavedItem lastAdded = netFolder.Children.ElementAt(idx);
+                    if (lastAdded is SavedViewpoint svp)
+                        doc.SavedViewpoints.ReplaceFromCurrentView(svp);
+
                     DebugLog.Log($"  Saved (index {idx})");
                 }
                 else
@@ -618,7 +681,12 @@ namespace SectionPlaneZoom
                     DebugLog.Log($"  Saved to root");
                 }
 
-                // 6. Reset
+
+                // 7. Reset
+
+                //activeView.SetRedlines("{\"Type\":\"RedlineCollection\",\"Version\":1,\"Values\":[]}");
+                SetSectionPlaneAtClash(0, false);
+
                 doc.Models.ResetPermanentMaterials(clashElements);
                 doc.CurrentSelection.Clear();
 
