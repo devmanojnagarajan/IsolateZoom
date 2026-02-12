@@ -31,7 +31,7 @@ namespace SectionPlaneZoom
     {
         public override int Execute(params string[] parameters)
         {
-            // it shoud be somehwere here?
+            // it should be somewhere here?
             try
             {
                 if (connectionString == null)
