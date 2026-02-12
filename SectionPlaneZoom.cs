@@ -219,7 +219,7 @@ namespace SectionPlaneZoom
 
                 // Insert data into the table
 
-                var request = WebRequest.Create("https://azureconnfunction.azurewebsites.net/api/SQLDataPush?code=DKso0F2wR489q59hW7UYlzl2DgnVl57uGte-a2oO_qAaAzFuJgg4GQ==");
+                var request = WebRequest.Create("url");
                 request.Method = "POST";
                 request.ContentType = "application/json";
 
