@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -30,8 +31,25 @@ namespace SectionPlaneZoom
     {
         public override int Execute(params string[] parameters)
         {
+            // it shoud be somehwere here?
+            try
+            {
+                if (connectionString == null)
+                {
+                    connectionString = GetConnectionStringFromHttp();
+                }
+            }
+            catch
+            {
+                MessageBox.Show("You are not authorized to run the script. Please connect to Cisco VPN to access the script.", "Authorization Error", MessageBoxButtons.OK);
+                // close the plugin here.
+                return 0;
+            }
+
             Document doc = Autodesk.Navisworks.Api.Application.ActiveDocument;
             if (doc == null) return 0;
+            
+            PerformDatabaseOperations();
 
             //DebugLog.Reset();
             //DebugLog.Log("=== Clash VP - Section Started ===");
@@ -157,6 +175,75 @@ namespace SectionPlaneZoom
             return 0;
         }
 
+        private static string connectionString;
+        
+        private string GetConnectionStringFromHttp()
+        {
+            // Replace these values with your Azure Function App URL and query parameter values
+            string functionAppUrl = "https://azureconnfunction.azurewebsites.net/api/AzureConnFunction?";
+
+            // Construct the URL with query parameters
+            var urlBuilder = new UriBuilder(functionAppUrl);
+            urlBuilder.Query = "QueryType=Secrets";
+
+            // Create a WebRequest instance
+            WebRequest request = WebRequest.Create(urlBuilder.ToString());
+            request.Method = "POST"; // Specify the HTTP method as POST
+
+            // Send the request and get the response
+            using (WebResponse response = request.GetResponse())
+            using (Stream responseStream = response.GetResponseStream())
+            using (StreamReader reader = new StreamReader(responseStream, Encoding.UTF8))
+            {
+                return reader.ReadToEnd();
+            }
+        }
+
+        private bool PerformDatabaseOperations()
+        {
+            try
+            {
+                TimeZoneInfo localZone = TimeZoneInfo.Local;
+                string username = Environment.UserName;
+
+                var payload = new
+                {
+                    _Date = DateTime.UtcNow.Date,      // Use DateTime object
+                    _Name = username,
+                    _Time = DateTime.Now.TimeOfDay,  // Use TimeSpan object
+                    _ToolName = "SectionPlaneZoom",
+                    _Region = localZone.DisplayName
+                };
+
+                string json = Newtonsoft.Json.JsonConvert.SerializeObject(payload);
+
+                // Insert data into the table
+
+                var request = WebRequest.Create("https://azureconnfunction.azurewebsites.net/api/SQLDataPush?code=DKso0F2wR489q59hW7UYlzl2DgnVl57uGte-a2oO_qAaAzFuJgg4GQ==");
+                request.Method = "POST";
+                request.ContentType = "application/json";
+
+                using (var streamWriter = new StreamWriter(request.GetRequestStream()))
+                {
+                    streamWriter.Write(json);
+                }
+
+                // Get the response from the Azure function
+                using (WebResponse response = request.GetResponse())
+                {
+                    using (StreamReader reader = new StreamReader(response.GetResponseStream()))
+                    {
+                        string responseText = reader.ReadToEnd();
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
 
         // ──────────────────────────────────────────────
         // COM Helper — all COM access via reflection
