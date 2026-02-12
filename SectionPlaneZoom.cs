@@ -180,7 +180,7 @@ namespace SectionPlaneZoom
         private string GetConnectionStringFromHttp()
         {
             // Replace these values with your Azure Function App URL and query parameter values
-            string functionAppUrl = "https://azureconnfunction.azurewebsites.net/api/AzureConnFunction?";
+            string functionAppUrl = "url";
 
             // Construct the URL with query parameters
             var urlBuilder = new UriBuilder(functionAppUrl);
